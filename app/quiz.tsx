@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage"; // ✅ Added
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -25,7 +26,7 @@ interface Question {
 
 export default function QuizScreen() {
   const router = useRouter();
-  const { selectedTopic, stage, score, setScore } = useGame();
+  const { selectedTopic, stage, score, setScore, markStageCompleted } = useGame();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [current, setCurrent] = useState<number>(0);
@@ -33,6 +34,7 @@ export default function QuizScreen() {
   const [showResult, setShowResult] = useState<boolean>(false);
   const [isTimeUp, setIsTimeUp] = useState<boolean>(false);
   const [timerKey, setTimerKey] = useState<number>(0);
+  const [answeredQuestions, setAnsweredQuestions] = useState<any[]>([]); // ✅ Track all answers
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -43,25 +45,17 @@ export default function QuizScreen() {
       .map(() => new Animated.Value(0))
   ).current;
 
-  // Floating background animation
+  // Floating animation
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -15,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
+        Animated.timing(floatAnim, { toValue: -15, duration: 3000, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 3000, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
-  // Load questions
+  // Load and shuffle questions
   useEffect(() => {
     if (!selectedTopic) {
       router.replace("/topic-select");
@@ -85,15 +79,16 @@ export default function QuizScreen() {
     setShowResult(false);
     setIsTimeUp(false);
     setTimerKey(0);
+    setAnsweredQuestions([]); // ✅ reset answers on new quiz
   }, [selectedTopic, stage, router]);
 
-  // Animate options on question change
+  // Animate options when new question loads
   useEffect(() => {
     if (questions.length > 0) {
-      optionAnims.forEach((anim, index) => {
+      optionAnims.forEach((anim, i) => {
         Animated.spring(anim, {
           toValue: 1,
-          delay: index * 100,
+          delay: i * 100,
           tension: 50,
           friction: 7,
           useNativeDriver: true,
@@ -102,7 +97,7 @@ export default function QuizScreen() {
     }
   }, [current, questions]);
 
-  // Navigate after showing result
+  // Navigate to result after finishing
   useEffect(() => {
     if (showResult) {
       const t = setTimeout(() => {
@@ -110,42 +105,61 @@ export default function QuizScreen() {
       }, 800);
       return () => clearTimeout(t);
     }
-  }, [showResult, router]);
+  }, [showResult]);
+
+  // ✅ Save the user’s answers to AsyncStorage
+  const saveAnswers = async (newAnswers: any[]) => {
+    try {
+      if (selectedTopic) {
+        await AsyncStorage.setItem(`answers_${selectedTopic}`, JSON.stringify(newAnswers));
+      }
+    } catch (err) {
+      console.error("Failed to save answers:", err);
+    }
+  };
 
   // Handle answer selection
-  const handleAnswer = (option: string) => {
+  const handleAnswer = async (option: string) => {
     if (!questions[current] || selected) return;
     const correct = questions[current].answer;
+    const isCorrect = option === correct;
+
     setSelected(option);
 
-    if (option === correct) {
-      setScore((prev: number) => prev + 1);
-      // Success pulse animation
+    // ✅ Save current question record
+    const answeredItem = {
+      question: questions[current].question,
+      options: questions[current].options,
+      correctAnswer: correct,
+      selectedAnswer: option,
+    };
+
+    const updatedAnswers = [...answeredQuestions, answeredItem];
+    setAnsweredQuestions(updatedAnswers);
+    await saveAnswers(updatedAnswers); // ✅ store immediately for review later
+
+    if (isCorrect) {
+      setScore((prev) => prev + 1);
       Animated.sequence([
         Animated.timing(scaleAnim, { toValue: 1.05, duration: 100, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
       ]).start();
     } else {
-      // Error shake animation
       Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 0.98, duration: 50, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1.02, duration: 50, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.98, duration: 50, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.97, duration: 50, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.03, duration: 50, useNativeDriver: true }),
         Animated.timing(scaleAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
       ]).start();
     }
 
-    setTimeout(() => {
-      nextQuestion();
-    }, 700);
+    setTimeout(() => nextQuestion(), 700);
   };
 
-  // Go to next question
-  const nextQuestion = () => {
+  // Next question logic
+  const nextQuestion = async () => {
     setIsTimeUp(false);
     if (current + 1 < questions.length) {
-      // Reset option animations
-      optionAnims.forEach((anim) => anim.setValue(0));
+      optionAnims.forEach((a) => a.setValue(0));
 
       Animated.sequence([
         Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
@@ -156,11 +170,12 @@ export default function QuizScreen() {
         setTimerKey((prev) => prev + 1);
       });
     } else {
+      if (selectedTopic) await markStageCompleted(selectedTopic, stage);
       setShowResult(true);
     }
   };
 
-  // Handle time running out
+  // Handle time up
   const handleTimeUp = () => {
     if (!selected && !isTimeUp) {
       setIsTimeUp(true);
@@ -171,10 +186,7 @@ export default function QuizScreen() {
   // Loading guard
   if (!questions.length) {
     return (
-      <LinearGradient
-        colors={["#0f0c29", "#302b63", "#24243e"]}
-        style={styles.loadingContainer}
-      >
+      <LinearGradient colors={["#0f0c29", "#302b63", "#24243e"]} style={styles.loadingContainer}>
         <View style={styles.loadingSpinner}>
           <Text style={styles.loadingEmoji}>⏳</Text>
           <Text style={styles.loadingText}>Loading Questions...</Text>
@@ -188,36 +200,15 @@ export default function QuizScreen() {
   const progressPercent = ((current + 1) / total) * 100;
 
   return (
-    <LinearGradient
-      colors={["#0f0c29", "#302b63", "#24243e"]}
-      style={styles.container}
-    >
-      {/* Animated decorative elements */}
-      <Animated.View
-        style={[
-          styles.decorCircle,
-          styles.decorCircle1,
-          { transform: [{ translateY: floatAnim }] },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.decorCircle,
-          styles.decorCircle2,
-          { transform: [{ translateY: floatAnim }] },
-        ]}
-      />
+    <LinearGradient colors={["#0f0c29", "#302b63", "#24243e"]} style={styles.container}>
+      <Animated.View style={[styles.decorCircle, styles.circle1, { transform: [{ translateY: floatAnim }] }]} />
+      <Animated.View style={[styles.decorCircle, styles.circle2, { transform: [{ translateY: floatAnim }] }]} />
 
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.stageContainer}>
           <Text style={styles.stageLabel}>Stage</Text>
-          <LinearGradient
-            colors={[colors.primary, colors.secondary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.stageBadge}
-          >
+          <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.stageBadge}>
             <Text style={styles.stageNumber}>{stage}</Text>
           </LinearGradient>
         </View>
@@ -230,42 +221,29 @@ export default function QuizScreen() {
         </View>
       </View>
 
-      {/* Progress Bar */}
+      {/* Progress */}
       <View style={styles.progressContainer}>
         <View style={styles.progressInfo}>
-          <Text style={styles.progressText}>
-            Question {current + 1} / {total}
-          </Text>
+          <Text style={styles.progressText}>Question {current + 1} / {total}</Text>
           <Text style={styles.progressPercent}>{Math.round(progressPercent)}%</Text>
         </View>
         <View style={styles.progressBarBg}>
           <LinearGradient
             colors={[colors.primary, colors.secondary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
             style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
           />
         </View>
       </View>
 
-      {/* Timer */}
       {!showResult && (
-        <TimerBar
-          key={timerKey}
-          trigger={timerKey}
-          duration={25}
-          onTimeUp={handleTimeUp}
-        />
+        <TimerBar key={timerKey} trigger={timerKey} duration={25} onTimeUp={handleTimeUp} />
       )}
 
-      {/* Question Card */}
+      {/* Question */}
       <Animated.View
         style={[
           styles.questionCard,
-          { 
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          },
+          { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
         ]}
       >
         <LinearGradient
@@ -275,29 +253,21 @@ export default function QuizScreen() {
           <View style={styles.questionHeader}>
             <Text style={styles.questionLabel}>🎯 Question</Text>
           </View>
-          
+
           <Text style={styles.questionText}>{q.question}</Text>
 
-          {/* Options */}
           <View style={styles.optionsContainer}>
             {q.options.map((opt, i) => {
               const isSelected = selected === opt;
               const correct = selected && opt === q.answer;
               const wrong = selected && isSelected && opt !== q.answer;
-
-              const optionTranslateY = optionAnims[i].interpolate({
+              const translateY = optionAnims[i].interpolate({
                 inputRange: [0, 1],
                 outputRange: [50, 0],
               });
 
               return (
-                <Animated.View
-                  key={i}
-                  style={{
-                    opacity: optionAnims[i],
-                    transform: [{ translateY: optionTranslateY }],
-                  }}
-                >
+                <Animated.View key={i} style={{ opacity: optionAnims[i], transform: [{ translateY }] }}>
                   <TouchableOpacity
                     style={[styles.option, isSelected && styles.optionSelected]}
                     onPress={() => handleAnswer(opt)}
@@ -306,13 +276,7 @@ export default function QuizScreen() {
                   >
                     {correct || wrong ? (
                       <LinearGradient
-                        colors={
-                          correct
-                            ? ["#10b981", "#059669"]
-                            : ["#ef4444", "#dc2626"]
-                        }
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                        colors={correct ? ["#10b981", "#059669"] : ["#ef4444", "#dc2626"]}
                         style={styles.optionGradient}
                       >
                         <View style={styles.optionContent}>
@@ -322,9 +286,7 @@ export default function QuizScreen() {
                             </Text>
                           </View>
                           <Text style={styles.optionText}>{opt}</Text>
-                          <Text style={styles.optionEmoji}>
-                            {correct ? "✓" : "✗"}
-                          </Text>
+                          <Text style={styles.optionEmoji}>{correct ? "✓" : "✗"}</Text>
                         </View>
                       </LinearGradient>
                     ) : (
@@ -351,212 +313,43 @@ export default function QuizScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-  },
-  decorCircle: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    opacity: 0.08,
-  },
-  decorCircle1: {
-    backgroundColor: colors.primary,
-    top: 100,
-    right: -50,
-  },
-  decorCircle2: {
-    backgroundColor: colors.secondary,
-    bottom: 150,
-    left: -50,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  stageContainer: {
-    alignItems: "center",
-  },
-  stageLabel: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  stageBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: colors.secondary,
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  stageNumber: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  scoreContainer: {
-    alignItems: "center",
-  },
-  scoreLabel: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  scoreBadge: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: colors.secondary,
-  },
-  scoreText: {
-    color: colors.secondary,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  progressContainer: {
-    marginBottom: 20,
-  },
-  progressInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  progressText: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  progressPercent: {
-    color: colors.secondary,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  progressBarBg: {
-    height: 8,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 10,
-  },
-  questionCard: {
-    marginTop: 10,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  cardGradient: {
-    padding: 24,
-  },
-  questionHeader: {
-    marginBottom: 16,
-  },
-  questionLabel: {
-    color: colors.secondary,
-    fontSize: 14,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  questionText: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 30,
-    marginBottom: 24,
-  },
-  optionsContainer: {
-    gap: 12,
-  },
-  option: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.1)",
-    overflow: "hidden",
-  },
-  optionSelected: {
-    borderColor: colors.secondary,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  optionGradient: {
-    padding: 16,
-  },
-  optionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-  },
-  optionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  optionIconSelected: {
-    backgroundColor: colors.secondary,
-  },
-  optionIconText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  optionText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  optionTextSelected: {
-    color: "#fff",
-  },
-  optionEmoji: {
-    fontSize: 20,
-    marginLeft: 8,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingSpinner: {
-    alignItems: "center",
-  },
-  loadingEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  loadingText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-  },
+  container: { flex: 1, paddingTop: 60, paddingHorizontal: 20 },
+  decorCircle: { position: "absolute", borderRadius: 100, opacity: 0.08 },
+  circle1: { width: 200, height: 200, backgroundColor: colors.primary, top: 100, right: -50 },
+  circle2: { width: 150, height: 150, backgroundColor: colors.secondary, bottom: 150, left: -50 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  stageContainer: { alignItems: "center" },
+  stageLabel: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 6 },
+  stageBadge: { width: 50, height: 50, borderRadius: 25, justifyContent: "center", alignItems: "center" },
+  stageNumber: { color: "#fff", fontSize: 24, fontWeight: "900" },
+  scoreContainer: { alignItems: "center" },
+  scoreLabel: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 6 },
+  scoreBadge: { backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  scoreText: { color: colors.secondary, fontSize: 20, fontWeight: "900" },
+  progressContainer: { marginBottom: 20 },
+  progressInfo: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  progressText: { color: "rgba(255,255,255,0.8)", fontSize: 14 },
+  progressPercent: { color: colors.secondary, fontSize: 14, fontWeight: "700" },
+  progressBarBg: { height: 8, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 10 },
+  progressBarFill: { height: "100%", borderRadius: 10 },
+  questionCard: { borderRadius: 20, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
+  cardGradient: { padding: 24 },
+  questionHeader: { marginBottom: 16 },
+  questionLabel: { color: colors.secondary, fontSize: 14, fontWeight: "700" },
+  questionText: { color: "#fff", fontSize: 22, fontWeight: "700", lineHeight: 30, marginBottom: 24 },
+  optionsContainer: { gap: 12 },
+  option: { backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 16, borderWidth: 2, borderColor: "rgba(255,255,255,0.1)" },
+  optionSelected: { borderColor: colors.secondary, backgroundColor: "rgba(255,255,255,0.08)" },
+  optionGradient: { padding: 16 },
+  optionContent: { flexDirection: "row", alignItems: "center", padding: 16 },
+  optionIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.1)", justifyContent: "center", alignItems: "center", marginRight: 12 },
+  optionIconSelected: { backgroundColor: colors.secondary },
+  optionIconText: { color: "#fff", fontWeight: "800" },
+  optionText: { flex: 1, color: "#fff", fontSize: 16, fontWeight: "600" },
+  optionTextSelected: { color: "#fff" },
+  optionEmoji: { fontSize: 20, marginLeft: 8 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingSpinner: { alignItems: "center" },
+  loadingEmoji: { fontSize: 48, marginBottom: 16 },
+  loadingText: { color: "#fff", fontSize: 18, fontWeight: "600" },
 });

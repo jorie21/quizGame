@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useGame } from "../context/GameContext";
 import colors from "../theme/colors";
+import { getUsername, saveUsername } from "../utils/storage";
 
 const { width } = Dimensions.get("window");
 
@@ -23,8 +24,19 @@ export default function IndexScreen() {
   const [pulseAnim] = useState(new Animated.Value(1));
   const [floatAnim] = useState(new Animated.Value(0));
 
+  // ✅ Auto-redirect if username already saved
   useEffect(() => {
-    // Pulsing animation for title
+    (async () => {
+      const saved = await getUsername();
+      if (saved) {
+        setUsername(saved);
+        router.replace("/home");
+      }
+    })();
+  }, []);
+
+  // ✨ Animations
+  useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -40,7 +52,6 @@ export default function IndexScreen() {
       ])
     ).start();
 
-    // Floating animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
@@ -57,8 +68,10 @@ export default function IndexScreen() {
     ).start();
   }, []);
 
-  const handleStart = () => {
+  // ✅ Save username permanently and move to home
+  const handleStart = async () => {
     if (!name.trim()) return;
+    await saveUsername(name.trim());
     setUsername(name.trim());
     router.replace("/home");
   };
@@ -97,7 +110,7 @@ export default function IndexScreen() {
       style={styles.container}
     >
       <View style={styles.contentContainer}>
-        {/* Animated decorative elements */}
+        {/* Animated background */}
         <Animated.View
           style={[
             styles.decorCircle,
@@ -113,12 +126,9 @@ export default function IndexScreen() {
           ]}
         />
 
-        {/* Title with pulse animation */}
+        {/* Title */}
         <Animated.View
-          style={[
-            styles.titleContainer,
-            { transform: [{ scale: pulseAnim }] },
-          ]}
+          style={[styles.titleContainer, { transform: [{ scale: pulseAnim }] }]}
         >
           <Text style={styles.titleEmoji}>⚡</Text>
           <Text style={styles.title}>QUIZ ARENA</Text>
@@ -127,14 +137,11 @@ export default function IndexScreen() {
 
         <Text style={styles.subtitle}>Test Your Knowledge. Claim Victory.</Text>
 
-        {/* Input with animated border and scale */}
+        {/* Username input */}
         <Animated.View
           style={[
             styles.inputContainer,
-            {
-              borderColor,
-              transform: [{ scale: inputScale }],
-            },
+            { borderColor, transform: [{ scale: inputScale }] },
           ]}
         >
           <View style={styles.inputIcon}>
@@ -152,7 +159,7 @@ export default function IndexScreen() {
           />
         </Animated.View>
 
-        {/* Modern button with gradient */}
+        {/* Start button */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={handleStart}
@@ -174,7 +181,7 @@ export default function IndexScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Stats preview */}
+        {/* Stats footer */}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>1000+</Text>
@@ -197,60 +204,50 @@ export default function IndexScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1,
-  },
+  container: { flex: 1 },
   contentContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 30,
-    position: "relative",
   },
   decorCircle: {
     position: "absolute",
-    width: 200,
-    height: 200,
     borderRadius: 100,
     opacity: 0.1,
   },
   decorCircle1: {
+    width: 200,
+    height: 200,
     backgroundColor: colors.primary,
     top: 50,
     right: -50,
   },
   decorCircle2: {
+    width: 150,
+    height: 150,
     backgroundColor: colors.secondary,
     bottom: 100,
     left: -50,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
   },
   titleContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
   },
-  titleEmoji: {
-    fontSize: 32,
-    marginHorizontal: 8,
-  },
+  titleEmoji: { fontSize: 32, marginHorizontal: 8 },
   title: {
     fontSize: 36,
     fontWeight: "900",
     color: "#fff",
     letterSpacing: 2,
-    textAlign: "center",
     textShadowColor: colors.primary,
-    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
   },
   subtitle: {
     fontSize: 16,
     color: "rgba(255,255,255,0.7)",
     marginBottom: 50,
-    letterSpacing: 0.5,
     fontWeight: "500",
   },
   inputContainer: {
@@ -258,19 +255,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.05)",
-    backdropFilter: "blur(10px)",
     borderWidth: 2,
     borderRadius: 16,
     marginBottom: 25,
     overflow: "hidden",
   },
-  inputIcon: {
-    paddingLeft: 18,
-    paddingRight: 10,
-  },
-  iconText: {
-    fontSize: 20,
-  },
+  inputIcon: { paddingLeft: 18, paddingRight: 10 },
+  iconText: { fontSize: 20 },
   input: {
     flex: 1,
     color: "#fff",
@@ -303,11 +294,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginRight: 8,
   },
-  btnArrow: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
+  btnArrow: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -319,10 +306,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
+  statItem: { alignItems: "center", flex: 1 },
   statNumber: {
     fontSize: 24,
     fontWeight: "900",

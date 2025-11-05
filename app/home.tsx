@@ -2,6 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -11,12 +12,13 @@ import {
 } from "react-native";
 import { useGame } from "../context/GameContext";
 import colors from "../theme/colors";
+import { clearAllProgress } from "../utils/storage"; // ✅ import the fixed storage clear helper
 
 const { width } = Dimensions.get("window");
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { username } = useGame();
+  const { username, resetAll } = useGame();
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   const [floatAnim] = useState(new Animated.Value(0));
@@ -60,6 +62,31 @@ export default function HomeScreen() {
       ])
     ).start();
   }, []);
+
+  // 🧹 Handle reset all progress (clears AsyncStorage + in-memory)
+  const handleReset = () => {
+    Alert.alert(
+      "Reset Progress",
+      "Are you sure you want to clear all saved data and start fresh?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes, Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await clearAllProgress(); // ✅ remove AsyncStorage keys
+              await resetAll(); // ✅ clear GameContext state
+              router.replace("/"); // ✅ go back to username entry screen
+              console.log("✅ Data cleared and app reset");
+            } catch (err) {
+              console.error("Error clearing progress:", err);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <LinearGradient
@@ -117,6 +144,7 @@ export default function HomeScreen() {
 
         {/* Action buttons */}
         <View style={styles.buttonsContainer}>
+          {/* Start Quiz */}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => router.push("/topic-select")}
@@ -138,63 +166,42 @@ export default function HomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <View style={styles.secondaryButtons}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                // Add leaderboard navigation when available
-              }}
-              style={styles.secondaryBtnWrapper}
+          {/* Reset Progress */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleReset}
+            style={styles.btnWrapper}
+          >
+            <LinearGradient
+              colors={["#444", "#222"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.primaryBtn}
             >
-              <View style={styles.secondaryBtn}>
-                <Text style={styles.secondaryBtnIcon}>🏆</Text>
-                <Text style={styles.secondaryBtnText}>Leaderboard</Text>
+              <View style={styles.btnContent}>
+                <Text style={styles.btnIcon}>🧹</Text>
+                <View style={styles.btnTextContainer}>
+                  <Text style={styles.btnText}>RESET PROGRESS</Text>
+                  <Text style={styles.btnSubtext}>Clear all saved data</Text>
+                </View>
               </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                // Add stats navigation when available
-              }}
-              style={styles.secondaryBtnWrapper}
-            >
-              <View style={styles.secondaryBtn}>
-                <Text style={styles.secondaryBtnIcon}>📊</Text>
-                <Text style={styles.secondaryBtnText}>My Stats</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-
-        {/* Logout button */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => router.replace("/")}
-          style={styles.logoutBtn}
-        >
-          <Text style={styles.logoutText}>← Log Out</Text>
-        </TouchableOpacity>
       </Animated.View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   contentContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 30,
   },
-  decorCircle: {
-    position: "absolute",
-    borderRadius: 9999,
-    opacity: 0.08,
-  },
+  decorCircle: { position: "absolute", borderRadius: 9999, opacity: 0.08 },
   decorCircle1: {
     width: 250,
     height: 250,
@@ -226,9 +233,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  avatarContainer: {
-    marginBottom: 20,
-  },
+  avatarContainer: { marginBottom: 20 },
   avatar: {
     width: 80,
     height: 80,
@@ -241,11 +246,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 10,
   },
-  avatarText: {
-    fontSize: 36,
-    fontWeight: "900",
-    color: "#fff",
-  },
+  avatarText: { fontSize: 36, fontWeight: "900", color: "#fff" },
   welcome: {
     color: "rgba(255,255,255,0.7)",
     fontSize: 18,
@@ -258,18 +259,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 10,
     textShadowColor: colors.primary,
-    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 15,
   },
-  subtitle: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  buttonsContainer: {
-    width: "100%",
-    marginBottom: 20,
-  },
+  subtitle: { color: "rgba(255,255,255,0.6)", fontSize: 16, fontWeight: "500" },
+  buttonsContainer: { width: "100%", marginBottom: 20 },
   btnWrapper: {
     width: "100%",
     borderRadius: 20,
@@ -281,21 +274,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 10,
   },
-  primaryBtn: {
-    paddingVertical: 20,
-    paddingHorizontal: 25,
-  },
-  btnContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  btnIcon: {
-    fontSize: 32,
-    marginRight: 15,
-  },
-  btnTextContainer: {
-    flex: 1,
-  },
+  primaryBtn: { paddingVertical: 20, paddingHorizontal: 25 },
+  btnContent: { flexDirection: "row", alignItems: "center" },
+  btnIcon: { fontSize: 32, marginRight: 15 },
+  btnTextContainer: { flex: 1 },
   btnText: {
     color: "#fff",
     fontSize: 20,
@@ -303,45 +285,5 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 2,
   },
-  btnSubtext: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  secondaryButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 15,
-  },
-  secondaryBtnWrapper: {
-    flex: 1,
-  },
-  secondaryBtn: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 15,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  secondaryBtnIcon: {
-    fontSize: 28,
-    marginBottom: 8,
-  },
-  secondaryBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  logoutBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-  },
-  logoutText: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  btnSubtext: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: "500" },
 });

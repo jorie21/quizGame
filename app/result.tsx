@@ -16,12 +16,22 @@ const { width } = Dimensions.get("window");
 
 export default function ResultScreen() {
   const router = useRouter();
-  const { score, stage, resetStage, resetAll } = useGame();
+  const {
+    score,
+    stage,
+    resetStage,
+    resetAll,
+    selectedTopic,
+    markStageCompleted, // ✅ imported from context
+  } = useGame();
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const buttonScale1 = useRef(new Animated.Value(0)).current;
+  const buttonScale2 = useRef(new Animated.Value(0)).current;
+
   const confettiAnims = useRef(
     Array(8)
       .fill(0)
@@ -33,11 +43,14 @@ export default function ResultScreen() {
       }))
   ).current;
 
-  const buttonScale1 = useRef(new Animated.Value(0)).current;
-  const buttonScale2 = useRef(new Animated.Value(0)).current;
+  // ✅ NEW: Save stage progress when user reaches this screen
+  useEffect(() => {
+    if (selectedTopic) {
+      markStageCompleted(selectedTopic, stage);
+    }
+  }, [selectedTopic, stage]);
 
   useEffect(() => {
-    // Entrance animations
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -52,7 +65,6 @@ export default function ResultScreen() {
       }),
     ]).start();
 
-    // Score pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -68,7 +80,6 @@ export default function ResultScreen() {
       ])
     ).start();
 
-    // Floating animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
@@ -122,7 +133,6 @@ export default function ResultScreen() {
       ]).start();
     });
 
-    // Button entrance animations
     setTimeout(() => {
       Animated.spring(buttonScale1, {
         toValue: 1,
@@ -142,6 +152,7 @@ export default function ResultScreen() {
     }, 500);
   }, []);
 
+  // ✅ Keep your same navigation behavior
   const handleNext = () => {
     if (stage < 5) {
       resetStage();
@@ -157,42 +168,38 @@ export default function ResultScreen() {
   };
 
   const percentage = (score / 20) * 100;
-  const performanceEmoji = percentage >= 80 ? "🔥" : percentage >= 60 ? "⭐" : percentage >= 40 ? "👍" : "💪";
-  const performanceText = percentage >= 80 ? "Outstanding!" : percentage >= 60 ? "Great Job!" : percentage >= 40 ? "Good Effort!" : "Keep Trying!";
+  const performanceEmoji =
+    percentage >= 80
+      ? "🔥"
+      : percentage >= 60
+      ? "⭐"
+      : percentage >= 40
+      ? "👍"
+      : "💪";
+  const performanceText =
+    percentage >= 80
+      ? "Outstanding!"
+      : percentage >= 60
+      ? "Great Job!"
+      : percentage >= 40
+      ? "Good Effort!"
+      : "Keep Trying!";
 
   return (
     <LinearGradient
       colors={["#0f0c29", "#302b63", "#24243e"]}
       style={styles.container}
     >
-      {/* Animated decorative elements */}
       <Animated.View
-        style={[
-          styles.decorCircle,
-          styles.decorCircle1,
-          { transform: [{ translateY: floatAnim }] },
-        ]}
+        style={[styles.decorCircle, styles.decorCircle1, { transform: [{ translateY: floatAnim }] }]}
       />
       <Animated.View
-        style={[
-          styles.decorCircle,
-          styles.decorCircle2,
-          { transform: [{ translateY: floatAnim }] },
-        ]}
+        style={[styles.decorCircle, styles.decorCircle2, { transform: [{ translateY: floatAnim }] }]}
       />
 
-      {/* Confetti particles */}
-   {confettiAnims.map((anim, index) => {
-      const confettiColors: string[] = [
-        colors.primary,
-        colors.secondary,
-        "#fbbf24",
-        "#10b981",
-        "#ef4444",
-      ];
-      const color = confettiColors[index % confettiColors.length];
-
-        
+      {confettiAnims.map((anim, index) => {
+        const colorsArr = [colors.primary, colors.secondary, "#fbbf24", "#10b981", "#ef4444"];
+        const color = colorsArr[index % colorsArr.length];
         return (
           <Animated.View
             key={index}
@@ -204,10 +211,12 @@ export default function ResultScreen() {
                 transform: [
                   { translateX: anim.x },
                   { translateY: anim.y },
-                  { rotate: anim.rotate.interpolate({
-                    inputRange: [0, 360],
-                    outputRange: ['0deg', '360deg'],
-                  })},
+                  {
+                    rotate: anim.rotate.interpolate({
+                      inputRange: [0, 360],
+                      outputRange: ["0deg", "360deg"],
+                    }),
+                  },
                 ],
               },
             ]}
@@ -218,10 +227,7 @@ export default function ResultScreen() {
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         {/* Stage Complete Header */}
         <Animated.View
-          style={[
-            styles.headerContainer,
-            { transform: [{ scale: scaleAnim }] },
-          ]}
+          style={[styles.headerContainer, { transform: [{ scale: scaleAnim }] }]}
         >
           <View style={styles.stageCompleteBox}>
             <Text style={styles.stageLabel}>Stage {stage}</Text>
@@ -238,10 +244,7 @@ export default function ResultScreen() {
 
         {/* Score Display */}
         <Animated.View
-          style={[
-            styles.scoreContainer,
-            { transform: [{ scale: pulseAnim }] },
-          ]}
+          style={[styles.scoreContainer, { transform: [{ scale: pulseAnim }] }]}
         >
           <LinearGradient
             colors={["rgba(255,255,255,0.08)", "rgba(255,255,255,0.02)"]}
@@ -249,49 +252,20 @@ export default function ResultScreen() {
           >
             <Text style={styles.performanceEmoji}>{performanceEmoji}</Text>
             <Text style={styles.performanceText}>{performanceText}</Text>
-            
+
             <View style={styles.scoreDisplay}>
               <Text style={styles.scoreNumber}>{score}</Text>
               <Text style={styles.scoreTotal}>/20</Text>
             </View>
 
-            <View style={styles.percentageContainer}>
-              <View style={styles.percentageBarBg}>
-                <LinearGradient
-                  colors={[colors.primary, colors.secondary]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.percentageBarFill, { width: `${percentage}%` }]}
-                />
-              </View>
-              <Text style={styles.percentageText}>{percentage.toFixed(0)}% Correct</Text>
-            </View>
-
-            {/* Stats Grid */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statIcon}>✓</Text>
-                <Text style={styles.statValue}>{score}</Text>
-                <Text style={styles.statLabel}>Correct</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <Text style={styles.statIcon}>✗</Text>
-                <Text style={styles.statValue}>{20 - score}</Text>
-                <Text style={styles.statLabel}>Wrong</Text>
-              </View>
-            </View>
+            <Text style={styles.percentageText}>{percentage.toFixed(0)}% Correct</Text>
           </LinearGradient>
         </Animated.View>
 
         {/* Action Buttons */}
         <View style={styles.buttonsContainer}>
           <Animated.View style={{ transform: [{ scale: buttonScale1 }] }}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handleNext}
-              style={styles.btnWrapper}
-            >
+            <TouchableOpacity activeOpacity={0.85} onPress={handleNext} style={styles.btnWrapper}>
               <LinearGradient
                 colors={[colors.primary, colors.secondary, colors.primary]}
                 start={{ x: 0, y: 0 }}
@@ -307,11 +281,7 @@ export default function ResultScreen() {
           </Animated.View>
 
           <Animated.View style={{ transform: [{ scale: buttonScale2 }] }}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handleRestart}
-              style={styles.secondaryBtnWrapper}
-            >
+            <TouchableOpacity activeOpacity={0.85} onPress={handleRestart}>
               <View style={styles.secondaryBtn}>
                 <Text style={styles.secondaryBtnText}>🔄 Restart Game</Text>
               </View>
@@ -324,12 +294,7 @@ export default function ResultScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 30,
-  },
+  container: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 30 },
   decorCircle: {
     position: "absolute",
     width: 250,
@@ -337,44 +302,13 @@ const styles = StyleSheet.create({
     borderRadius: 125,
     opacity: 0.08,
   },
-  decorCircle1: {
-    backgroundColor: colors.primary,
-    top: -50,
-    right: -80,
-  },
-  decorCircle2: {
-    backgroundColor: colors.secondary,
-    bottom: -50,
-    left: -80,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-  },
-  confetti: {
-    position: "absolute",
-    width: 12,
-    height: 12,
-    top: "50%",
-    left: "50%",
-  },
-  content: {
-    width: "100%",
-    alignItems: "center",
-  },
-  headerContainer: {
-    marginBottom: 30,
-  },
-  stageCompleteBox: {
-    alignItems: "center",
-  },
-  stageLabel: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
-    textTransform: "uppercase",
-    letterSpacing: 2,
-  },
+  decorCircle1: { backgroundColor: colors.primary, top: -50, right: -80 },
+  decorCircle2: { backgroundColor: colors.secondary, bottom: -50, left: -80 },
+  confetti: { position: "absolute", width: 12, height: 12, top: "50%", left: "50%" },
+  content: { width: "100%", alignItems: "center" },
+  headerContainer: { marginBottom: 30 },
+  stageCompleteBox: { alignItems: "center" },
+  stageLabel: { color: "rgba(255,255,255,0.6)", fontSize: 16, fontWeight: "600", marginBottom: 12 },
   completeTag: {
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -382,19 +316,9 @@ const styles = StyleSheet.create({
     shadowColor: colors.secondary,
     shadowOpacity: 0.5,
     shadowRadius: 15,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
   },
-  completeText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-  scoreContainer: {
-    width: "100%",
-    marginBottom: 30,
-  },
+  completeText: { color: "#fff", fontSize: 16, fontWeight: "900", letterSpacing: 2 },
+  scoreContainer: { width: "100%", marginBottom: 30 },
   scoreCard: {
     borderRadius: 24,
     padding: 30,
@@ -402,140 +326,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  performanceEmoji: {
-    fontSize: 56,
-    marginBottom: 8,
-  },
-  performanceText: {
-    color: colors.secondary,
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 20,
-    letterSpacing: 1,
-  },
-  scoreDisplay: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    marginBottom: 20,
-  },
-  scoreNumber: {
-    fontSize: 80,
-    fontWeight: "900",
-    color: "#fff",
-    textShadowColor: colors.primary,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 30,
-  },
-  scoreTotal: {
-    fontSize: 36,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.5)",
-    marginLeft: 4,
-  },
-  percentageContainer: {
-    width: "100%",
-    marginBottom: 20,
-  },
-  percentageBarBg: {
-    height: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  percentageBarFill: {
-    height: "100%",
-    borderRadius: 10,
-  },
-  percentageText: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    width: "100%",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  statBox: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    marginHorizontal: 20,
-  },
-  buttonsContainer: {
-    width: "100%",
-    gap: 16,
-  },
-  btnWrapper: {
-    width: "100%",
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: colors.secondary,
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
-  primaryBtn: {
-    paddingVertical: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  primaryBtnText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    marginRight: 8,
-  },
-  btnIcon: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  secondaryBtnWrapper: {
-    width: "100%",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
+  performanceEmoji: { fontSize: 56, marginBottom: 8 },
+  performanceText: { color: colors.secondary, fontSize: 20, fontWeight: "700", marginBottom: 20 },
+  scoreDisplay: { flexDirection: "row", alignItems: "baseline", marginBottom: 20 },
+  scoreNumber: { fontSize: 80, fontWeight: "900", color: "#fff" },
+  scoreTotal: { fontSize: 36, color: "rgba(255,255,255,0.5)", marginLeft: 4 },
+  percentageText: { color: "rgba(255,255,255,0.7)", fontSize: 16, fontWeight: "600" },
+  buttonsContainer: { width: "100%", gap: 16 },
+  btnWrapper: { width: "100%", borderRadius: 16, overflow: "hidden" },
+  primaryBtn: { paddingVertical: 18, flexDirection: "row", justifyContent: "center" },
+  primaryBtnText: { color: "#fff", fontSize: 18, fontWeight: "800", marginRight: 8 },
+  btnIcon: { fontSize: 20 },
   secondaryBtn: {
     backgroundColor: "rgba(255,255,255,0.08)",
     paddingVertical: 18,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 16,
     alignItems: "center",
   },
-  secondaryBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
+  secondaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });
