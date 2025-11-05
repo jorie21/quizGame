@@ -116,7 +116,10 @@ export default function TopicSelect() {
                   activeOpacity={0.85}
                   onPress={() => {
                     setSelectedTopic(t.fileKey);
-                    router.push("/stage-select");
+                   router.push({
+                      pathname: "/learning-module",
+                      params: { topic: t.fileKey },
+                    });
                   }}
                 >
                   <LinearGradient
